@@ -54,6 +54,8 @@ export type Database = {
       }
       orders: {
         Row: {
+          amount: number | null
+          assigned_to: string | null
           chapter_count: number | null
           created_at: string
           deadline: string | null
@@ -69,6 +71,8 @@ export type Database = {
           word_count: number | null
         }
         Insert: {
+          amount?: number | null
+          assigned_to?: string | null
           chapter_count?: number | null
           created_at?: string
           deadline?: string | null
@@ -84,6 +88,8 @@ export type Database = {
           word_count?: number | null
         }
         Update: {
+          amount?: number | null
+          assigned_to?: string | null
           chapter_count?: number | null
           created_at?: string
           deadline?: string | null
@@ -100,11 +106,124 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_receipts: {
+        Row: {
+          id: string
+          order_id: string
+          file_path: string
+          file_name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          file_path: string
+          file_name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          file_path?: string
+          file_name?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_receipts_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_ratings: {
+        Row: {
+          id: string
+          order_id: string
+          rating: number | null
+          testimony: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          rating?: number | null
+          testimony?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          rating?: number | null
+          testimony?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_ratings_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transactions: {
+        Row: {
+          id: string
+          order_id: string
+          amount: number
+          admin_amount: number
+          parttimer_amount: number
+          assigned_to: string | null
+          created_at: string
+          parttimer_paid_at: string | null
+          parttimer_receipt_path: string | null
+          parttimer_receipt_name: string | null
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          amount: number
+          admin_amount: number
+          parttimer_amount: number
+          assigned_to?: string | null
+          created_at?: string
+          parttimer_paid_at?: string | null
+          parttimer_receipt_path?: string | null
+          parttimer_receipt_name?: string | null
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          amount?: number
+          admin_amount?: number
+          parttimer_amount?: number
+          assigned_to?: string | null
+          created_at?: string
+          parttimer_paid_at?: string | null
+          parttimer_receipt_path?: string | null
+          parttimer_receipt_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
           email: string
           full_name: string
+          gcash_name: string | null
+          gcash_number: string | null
           id: string
           phone: string | null
           updated_at: string
@@ -114,6 +233,8 @@ export type Database = {
           created_at?: string
           email?: string
           full_name?: string
+          gcash_name?: string | null
+          gcash_number?: string | null
           id?: string
           phone?: string | null
           updated_at?: string
@@ -123,6 +244,8 @@ export type Database = {
           created_at?: string
           email?: string
           full_name?: string
+          gcash_name?: string | null
+          gcash_number?: string | null
           id?: string
           phone?: string | null
           updated_at?: string
@@ -135,16 +258,19 @@ export type Database = {
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
+          name: string | null
         }
         Insert: {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id: string
+          name?: string | null
         }
         Update: {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+          name?: string | null
         }
         Relationships: []
       }
@@ -162,7 +288,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "client"
+      app_role: "admin" | "client" | "parttimer"
       file_type: "input" | "output"
       order_status: "pending" | "in_progress" | "completed"
     }
@@ -292,7 +418,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "client"],
+      app_role: ["admin", "client", "parttimer"],
       file_type: ["input", "output"],
       order_status: ["pending", "in_progress", "completed"],
     },

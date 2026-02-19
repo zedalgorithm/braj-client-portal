@@ -9,6 +9,9 @@ import Auth from "./pages/Auth";
 import OrderForm from "./pages/OrderForm";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminTransactions from "./pages/AdminTransactions";
+import PartTimerDashboard from "./pages/PartTimerDashboard";
+import PartTimerAccount from "./pages/PartTimerAccount";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +29,9 @@ const App = () => (
             <Route path="/order" element={<OrderForm />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/transactions" element={<AdminTransactions />} />
+            <Route path="/parttimer" element={<PartTimerDashboard />} />
+            <Route path="/parttimer/account" element={<PartTimerAccount />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

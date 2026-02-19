@@ -13,19 +13,23 @@ import { BarChart3 } from "lucide-react";
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const defaultTab = searchParams.get("tab") === "signup" ? "signup" : "login";
+  const isPartTimerSignup = searchParams.get("parttimer") === "1";
   const [tab, setTab] = useState(defaultTab);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [gcashNumber, setGcashNumber] = useState("");
+  const [gcashName, setGcashName] = useState("");
   const [loading, setLoading] = useState(false);
-  const { user, isAdmin, signIn, signUp } = useAuth();
+  const { user, isAdmin, isPartTimer, isLoading, signIn, signUp } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      navigate(isAdmin ? "/admin" : "/dashboard");
-    }
-  }, [user, isAdmin, navigate]);
+    if (!user || isLoading) return;
+    if (isAdmin) navigate("/admin");
+    else if (isPartTimer) navigate("/parttimer");
+    else navigate("/dashboard");
+  }, [user, isAdmin, isPartTimer, isLoading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,12 +44,15 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await signUp(email, password, fullName);
+    const { error } = await signUp(email, password, fullName, isPartTimerSignup, isPartTimerSignup ? gcashNumber : undefined, isPartTimerSignup ? gcashName : undefined);
     setLoading(false);
     if (error) {
       toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Account created!", description: "Please check your email to verify your account." });
+      toast({
+        title: "Account created!",
+        description: isPartTimerSignup ? "Part-timer account created. Please check your email to verify." : "Please check your email to verify your account.",
+      });
       setTab("login");
     }
   };
@@ -60,7 +67,9 @@ export default function Auth() {
               <BarChart3 className="h-10 w-10 text-primary" />
             </div>
             <CardTitle>Welcome to BRAJ</CardTitle>
-            <CardDescription>Statistical &amp; Research Consultancy</CardDescription>
+            <CardDescription>
+            {isPartTimerSignup ? "Sign up to become a part-timer and work on client orders." : "Statistical & Research Consultancy"}
+          </CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs value={tab} onValueChange={setTab}>
@@ -86,7 +95,7 @@ export default function Auth() {
               <TabsContent value="signup">
                 <form onSubmit={handleSignUp} className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="signup-name">Full Name</Label>
+                    <Label htmlFor="signup-name">{isPartTimerSignup ? "Complete name" : "Full Name"}</Label>
                     <Input id="signup-name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
                   </div>
                   <div className="space-y-2">
@@ -97,8 +106,20 @@ export default function Auth() {
                     <Label htmlFor="signup-password">Password</Label>
                     <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
                   </div>
+                  {isPartTimerSignup && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="signup-gcash-number">GCash number</Label>
+                        <Input id="signup-gcash-number" type="tel" value={gcashNumber} onChange={(e) => setGcashNumber(e.target.value)} placeholder="e.g. 09171234567" required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="signup-gcash-name">GCash name</Label>
+                        <Input id="signup-gcash-name" value={gcashName} onChange={(e) => setGcashName(e.target.value)} placeholder="Name on GCash account" required />
+                      </div>
+                    </>
+                  )}
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Creating account..." : "Sign Up"}
+                    {loading ? "Creating account..." : isPartTimerSignup ? "Sign Up as Part-timer" : "Sign Up"}
                   </Button>
                 </form>
               </TabsContent>

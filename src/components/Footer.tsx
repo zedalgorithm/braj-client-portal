@@ -19,6 +19,7 @@ export function Footer() {
             <li>Statistical Analysis</li>
             <li>Research Assistance</li>
             <li>Turnitin Check</li>
+            <li>Validation of Instrument</li>
             <li>Paraphrasing</li>
             <li>Editing</li>
           </ul>
@@ -26,8 +27,8 @@ export function Footer() {
         <div>
           <h4 className="font-semibold mb-2">Contact</h4>
           <p className="text-sm text-muted-foreground">
-            Email: info@brajconsultancy.com<br />
-            Phone: +254 700 000 000
+            Email: baltazarabobojr@gmail.com<br />
+            Phone: 09155090144
           </p>
         </div>
       </div>

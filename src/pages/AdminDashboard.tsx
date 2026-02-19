@@ -10,8 +10,11 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { SHARING_PER_SERVICE, getAmountFromService, SERVICES } from "@/lib/services";
+import { fetchPartTimerRatings } from "@/lib/parttimer-ratings";
 import { toast } from "@/hooks/use-toast";
-import { Download, Upload, Loader2, Search } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Download, Loader2, Search, List, Clock, CheckCircle, FileCheck, Receipt, Star } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusColors: Record<string, string> = {
@@ -26,61 +29,90 @@ const statusLabels: Record<string, string> = {
   completed: "Completed",
 };
 
-type OrderWithProfile = Tables<"orders"> & { profiles?: { full_name: string; email: string } | null };
+type OrderWithProfile = Tables<"orders"> & {
+  profiles?: { full_name: string; email: string } | null;
+  assigneeProfile?: { full_name: string; email: string } | null;
+};
 
 export default function AdminDashboard() {
   const { user, isAdmin, isLoading } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderWithProfile[]>([]);
   const [files, setFiles] = useState<Tables<"order_files">[]>([]);
+  const [receipts, setReceipts] = useState<Tables<"payment_receipts">[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "in_progress" | "completed">("all");
   const [serviceFilter, setServiceFilter] = useState("all");
+  const [partTimerRatings, setPartTimerRatings] = useState<Map<string, { avg: number; count: number }>>(new Map());
 
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) navigate("/auth");
   }, [user, isAdmin, isLoading, navigate]);
 
   const fetchData = async () => {
-    // Fetch orders - profiles join may not work due to RLS, so we fetch separately
-    const { data: ordersData } = await supabase
-      .from("orders")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (ordersData && ordersData.length > 0) {
-      // Get unique user IDs and fetch profiles
-      const userIds = [...new Set(ordersData.map((o) => o.user_id))];
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email")
-        .in("user_id", userIds);
-
-      const profileMap = new Map(profilesData?.map((p) => [p.user_id, p]) || []);
-
-      const enriched = ordersData.map((o) => ({
-        ...o,
-        profiles: profileMap.get(o.user_id) || null,
-      }));
-      setOrders(enriched);
-
-      const orderIds = ordersData.map((o) => o.id);
-      const { data: filesData } = await supabase
-        .from("order_files")
+    try {
+      const { data: ordersData } = await supabase
+        .from("orders")
         .select("*")
-        .in("order_id", orderIds);
-      setFiles(filesData || []);
-    } else {
+        .order("created_at", { ascending: false });
+
+      if (ordersData && ordersData.length > 0) {
+        const orderIds = ordersData.map((o) => o.id);
+        const { data: filesData } = await supabase
+          .from("order_files")
+          .select("*")
+          .in("order_id", orderIds);
+        const { data: receiptsData } = await supabase
+          .from("payment_receipts")
+          .select("*")
+          .in("order_id", orderIds);
+
+        const userIds = [...new Set(ordersData.flatMap((o) => [o.user_id, o.assigned_to].filter(Boolean)))];
+        const uploaderIds = [...new Set((filesData || []).map((f) => f.uploaded_by).filter(Boolean))];
+        const allUserIds = [...new Set([...userIds, ...uploaderIds])];
+        const { data: allProfilesData } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, email")
+          .in("user_id", allUserIds);
+        const fullProfileMap = new Map((allProfilesData || []).map((p) => [p.user_id, p]));
+
+        const enriched = ordersData.map((o) => ({
+          ...o,
+          profiles: fullProfileMap.get(o.user_id) || null,
+          assigneeProfile: o.assigned_to ? (fullProfileMap.get(o.assigned_to) || null) : null,
+        }));
+        setOrders(enriched);
+        const assigneeIds = [...new Set(ordersData.map((o) => o.assigned_to).filter(Boolean))] as string[];
+        const ratings = await fetchPartTimerRatings(assigneeIds);
+        setPartTimerRatings(ratings);
+        setFiles(
+          (filesData || []).map((f) => ({
+            ...f,
+            uploader_name: f.uploaded_by
+              ? (fullProfileMap.get(f.uploaded_by)?.full_name || fullProfileMap.get(f.uploaded_by)?.email || "Unknown")
+              : null,
+          }))
+        );
+        setReceipts(receiptsData || []);
+      } else {
+        setOrders([]);
+      }
+    } catch {
       setOrders([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
     if (user && isAdmin) fetchData();
   }, [user, isAdmin]);
+
+  useEffect(() => {
+    setResearchAmountInput("");
+  }, [selectedOrder]);
 
   const updateStatus = async (orderId: string, status: "pending" | "in_progress" | "completed") => {
     const { error } = await supabase.from("orders").update({ status }).eq("id", orderId);
@@ -92,41 +124,69 @@ export default function AdminDashboard() {
     }
   };
 
+  const setStatisticalPricingTier = async (orderId: string, tierName: string) => {
+    const service = SERVICES.find((s) => s.name === "Statistical Analysis");
+    const tier = service?.tiers.find((t) => t.name === tierName);
+    if (!tier) return;
+    const { error } = await supabase
+      .from("orders")
+      .update({ pricing_tier: tier.name, amount: tier.priceValue })
+      .eq("id", orderId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, pricing_tier: tier.name, amount: tier.priceValue } : o)));
+      toast({ title: "Pricing tier set", description: `${tier.name} — ₱${tier.priceValue.toLocaleString()}` });
+    }
+  };
+
+  const [researchAmountInput, setResearchAmountInput] = useState("");
+  const [settingResearchAmount, setSettingResearchAmount] = useState(false);
+  const setResearchAmount = async (orderId: string, amount: number) => {
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast({ title: "Invalid amount", variant: "destructive" });
+      return;
+    }
+    setSettingResearchAmount(true);
+    const { error } = await supabase
+      .from("orders")
+      .update({ pricing_tier: "Agreed amount", amount })
+      .eq("id", orderId);
+    setSettingResearchAmount(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, pricing_tier: "Agreed amount", amount } : o)));
+      setResearchAmountInput("");
+      toast({ title: "Research amount set", description: `₱${amount.toLocaleString()}` });
+    }
+  };
+
   const togglePayment = async (orderId: string, current: boolean) => {
+    if (!current) {
+      const order = orders.find((o) => o.id === orderId);
+      const amount = Number(order?.amount) || (order ? getAmountFromService(order.service_type, order.pricing_tier) : 0);
+      const sharing = SHARING_PER_SERVICE[order?.service_type ?? ""] ?? { ownerPct: 40, parttimerPct: 60 };
+      const adminAmount = Math.round(amount * (sharing.ownerPct / 100) * 100) / 100;
+      const parttimerAmount = Math.round(amount * (sharing.parttimerPct / 100) * 100) / 100;
+      const { error: txError } = await supabase.from("transactions").insert({
+        order_id: orderId,
+        amount,
+        admin_amount: adminAmount,
+        parttimer_amount: parttimerAmount,
+        assigned_to: order?.assigned_to ?? null,
+      });
+      if (txError) {
+        toast({ title: "Error", description: txError.message, variant: "destructive" });
+        return;
+      }
+    }
     const { error } = await supabase.from("orders").update({ payment_received: !current }).eq("id", orderId);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, payment_received: !current } : o)));
-    }
-  };
-
-  const uploadOutputFile = async (orderId: string, file: File) => {
-    if (!user) return;
-    // For output files, use the order's user_id as folder
-    const order = orders.find((o) => o.id === orderId);
-    if (!order) return;
-
-    const filePath = `${order.user_id}/${orderId}/${file.name}`;
-    const { error: uploadError } = await supabase.storage.from("output-files").upload(filePath, file);
-    if (uploadError) {
-      toast({ title: "Upload failed", description: uploadError.message, variant: "destructive" });
-      return;
-    }
-
-    const { error: dbError } = await supabase.from("order_files").insert({
-      order_id: orderId,
-      file_type: "output" as const,
-      file_path: filePath,
-      file_name: file.name,
-      uploaded_by: user.id,
-    });
-
-    if (dbError) {
-      toast({ title: "Error", description: dbError.message, variant: "destructive" });
-    } else {
-      toast({ title: "File uploaded" });
-      fetchData();
+      if (!current) toast({ title: "Payment confirmed", description: "Client can download files. Transaction recorded with sharing for this service." });
     }
   };
 
@@ -143,6 +203,8 @@ export default function AdminDashboard() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const selectedReceipt = selectedOrder ? receipts.find((r) => r.order_id === selectedOrder) : null;
 
   const filtered = orders.filter((o) => {
     if (statusFilter !== "all" && o.status !== statusFilter) return false;
@@ -178,7 +240,36 @@ export default function AdminDashboard() {
       <Header />
       <main className="flex-1 py-8">
         <div className="container">
-          <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/transactions"><Receipt className="h-4 w-4 mr-1" /> Transaction History</Link>
+            </Button>
+          </div>
+
+          {/* Order status tabs: All | Pending | In Progress | Completed */}
+          <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted mb-6">
+            {[
+              { value: "all" as const, label: "All", icon: List, count: orders.length },
+              { value: "pending" as const, label: "Pending", icon: Clock, count: orders.filter((o) => o.status === "pending").length },
+              { value: "in_progress" as const, label: "In Progress", icon: Loader2, count: orders.filter((o) => o.status === "in_progress").length },
+              { value: "completed" as const, label: "Completed", icon: CheckCircle, count: orders.filter((o) => o.status === "completed").length },
+            ].map((tab) => (
+              <Button
+                key={tab.value}
+                variant={statusFilter === tab.value ? "default" : "ghost"}
+                size="sm"
+                className="flex items-center gap-2"
+                onClick={() => setStatusFilter(tab.value)}
+              >
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+                <Badge variant={statusFilter === tab.value ? "secondary" : "outline"} className="ml-1">
+                  {tab.count}
+                </Badge>
+              </Button>
+            ))}
+          </div>
 
           {/* Filters */}
           <div className="flex flex-wrap gap-3 mb-6">
@@ -191,15 +282,6 @@ export default function AdminDashboard() {
                 className="pl-9"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-              </SelectContent>
-            </Select>
             <Select value={serviceFilter} onValueChange={setServiceFilter}>
               <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -231,8 +313,18 @@ export default function AdminDashboard() {
                         <div>
                           <h3 className="font-semibold">{order.title}</h3>
                           <p className="text-sm text-muted-foreground">
-                            {order.service_type} — {order.profiles?.full_name || order.profiles?.email || "Unknown"}
+                            {order.service_type} — Client: {order.profiles?.full_name || order.profiles?.email || "Unknown"}
                           </p>
+                          {(order.status === "in_progress" || order.status === "completed") && order.assigneeProfile && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              Part-timer: {order.assigneeProfile.full_name || order.assigneeProfile.email || "Unknown"}
+                              {order.assigned_to && partTimerRatings.has(order.assigned_to) && (
+                                <span className="inline-flex items-center text-amber-600">
+                                  <Star className="h-3 w-3 fill-amber-500" /> {partTimerRatings.get(order.assigned_to)!.avg} ({partTimerRatings.get(order.assigned_to)!.count})
+                                </span>
+                              )}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground mt-1">
                             {new Date(order.created_at).toLocaleDateString()}
                           </p>
@@ -253,12 +345,74 @@ export default function AdminDashboard() {
                     <CardHeader>
                       <CardTitle className="text-lg">{selected.title}</CardTitle>
                       <CardDescription>
-                        {selected.service_type} — {selected.profiles?.full_name || "Unknown"}
-                        <br />{selected.profiles?.email}
+                        {selected.service_type}
+                        <br />Client: {selected.profiles?.full_name || selected.profiles?.email || "Unknown"}
+                        {selected.profiles?.email && <> ({selected.profiles.email})</>}
+                        {(selected.status === "in_progress" || selected.status === "completed") && selected.assigneeProfile && (
+                          <>
+                            <br />Part-timer: {selected.assigneeProfile.full_name || selected.assigneeProfile.email || "Unknown"}
+                            {selected.assigned_to && partTimerRatings.has(selected.assigned_to) && (
+                              <span className="inline-flex items-center gap-1 text-amber-600 ml-1">
+                                <Star className="h-4 w-4 fill-amber-500" /> {partTimerRatings.get(selected.assigned_to)!.avg} ({partTimerRatings.get(selected.assigned_to)!.count} ratings)
+                              </span>
+                            )}
+                          </>
+                        )}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4 text-sm">
+                      <div><strong>Client:</strong> {selected.profiles?.full_name || selected.profiles?.email || "Unknown"}</div>
+                      {(selected.status === "in_progress" || selected.status === "completed") && selected.assigneeProfile && (
+                        <div>
+                          <strong>Part-timer:</strong> {selected.assigneeProfile.full_name || selected.assigneeProfile.email || "Unknown"}
+                          {selected.assigned_to && partTimerRatings.has(selected.assigned_to) && (
+                            <span className="inline-flex items-center gap-1 text-amber-600 ml-1">
+                              <Star className="h-4 w-4 fill-amber-500" /> {partTimerRatings.get(selected.assigned_to)!.avg} ({partTimerRatings.get(selected.assigned_to)!.count})
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <div><strong>Tier:</strong> {selected.pricing_tier}</div>
+                      {selected.service_type === "Statistical Analysis" && selected.pricing_tier === "To be set by admin" && (
+                        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                          <strong className="text-amber-800">Set pricing tier (required before client pays)</strong>
+                          <Select
+                            value=""
+                            onValueChange={(v) => setStatisticalPricingTier(selected.id, v)}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Select tier" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Basic (Descriptive Statistics)">Basic — ₱1,500</SelectItem>
+                              <SelectItem value="Moderate (Inferential - Basic Comparison & Relationship)">Moderate — ₱2,500</SelectItem>
+                              <SelectItem value="Advanced (Multivariate & Predictive Analysis)">Advanced — ₱4,000</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      {selected.service_type === "Research" && (Number(selected.amount) === 0 || selected.pricing_tier === "To be set by admin" || selected.pricing_tier === "Open Quotation") && (
+                        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                          <strong className="text-amber-800">Set Research amount (required before client pays)</strong>
+                          <p className="text-xs text-amber-700">Contact Baltazar Abobo for an agreement, then set the agreed amount here.</p>
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              placeholder="Amount (₱)"
+                              value={researchAmountInput}
+                              onChange={(e) => setResearchAmountInput(e.target.value)}
+                              className="w-32"
+                            />
+                            <Button
+                              size="sm"
+                              disabled={settingResearchAmount || !researchAmountInput || Number(researchAmountInput) <= 0}
+                              onClick={() => setResearchAmount(selected.id, Number(researchAmountInput))}
+                            >
+                              {settingResearchAmount ? <Loader2 className="h-3 w-3 animate-spin" /> : "Set amount"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                       {selected.instructions && <div><strong>Instructions:</strong> {selected.instructions}</div>}
                       {selected.deadline && <div><strong>Deadline:</strong> {selected.deadline}</div>}
                       {selected.chapter_count && <div><strong>Chapters:</strong> {selected.chapter_count}</div>}
@@ -280,13 +434,52 @@ export default function AdminDashboard() {
                         </Select>
                       </div>
 
-                      {/* Payment Toggle */}
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          checked={selected.payment_received}
-                          onCheckedChange={() => togglePayment(selected.id, selected.payment_received)}
-                        />
-                        <span>Payment Received</span>
+                      {/* Payment */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={selected.payment_received}
+                            onCheckedChange={() => togglePayment(selected.id, selected.payment_received)}
+                          />
+                          <span>Payment Received</span>
+                        </div>
+                        {selected.service_type === "Statistical Analysis" && selected.pricing_tier === "To be set by admin" && (
+                          <p className="text-xs text-amber-700">Set the pricing tier above before confirming payment.</p>
+                        )}
+                        {selected.service_type === "Research" && (Number(selected.amount) === 0 || selected.pricing_tier === "To be set by admin" || selected.pricing_tier === "Open Quotation") && (
+                          <p className="text-xs text-amber-700">Set the Research amount above before confirming payment. Contact Baltazar Abobo for an agreement.</p>
+                        )}
+                        {selected.status === "completed" && !selected.payment_received && selectedReceipt && (selected.service_type !== "Statistical Analysis" || selected.pricing_tier !== "To be set by admin") && (selected.service_type !== "Research" || (Number(selected.amount) > 0 && selected.pricing_tier !== "To be set by admin" && selected.pricing_tier !== "Open Quotation")) && (
+                          <div className="space-y-2 pt-1">
+                            <div className="rounded-md border bg-muted/40 p-3 text-xs">
+                              {(() => {
+                                const sharing = SHARING_PER_SERVICE[selected.service_type] ?? { ownerPct: 40, parttimerPct: 60 };
+                                const amt = Number(selected.amount ?? 0);
+                                const ownerAmt = (amt * sharing.ownerPct / 100).toFixed(2);
+                                const ptAmt = (amt * sharing.parttimerPct / 100).toFixed(2);
+                                return (
+                                  <>
+                                    <p className="font-medium mb-1">Quotation — {selected.service_type}: Owner {sharing.ownerPct}% / Part-timer {sharing.parttimerPct}%</p>
+                                    <p>Total: ₱{amt.toLocaleString()} → Owner: ₱{ownerAmt} | Part-timer: ₱{ptAmt}</p>
+                                    <p className="text-muted-foreground mt-1">Admin will pay the part-timer their share.</p>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => downloadFile(selectedReceipt.file_path, selectedReceipt.file_name, "payment-receipts")}
+                              >
+                                <Download className="h-3 w-3 mr-1" /> View receipt
+                              </Button>
+                              <Button size="sm" onClick={() => togglePayment(selected.id, false)}>
+                                <FileCheck className="h-3 w-3 mr-1" /> Confirm payment
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Files */}
@@ -295,41 +488,24 @@ export default function AdminDashboard() {
                           <strong>Files:</strong>
                           <div className="mt-2 space-y-1">
                             {selectedFiles.map((f) => (
-                              <Button
-                                key={f.id}
-                                variant="outline"
-                                size="sm"
-                                className="w-full justify-start text-xs"
-                                onClick={() => downloadFile(f.file_path, f.file_name, f.file_type === "input" ? "input-files" : "output-files")}
-                              >
-                                <Download className="h-3 w-3 mr-1" />
-                                {f.file_name} ({f.file_type})
-                              </Button>
+                              <div key={f.id} className="space-y-0.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full justify-start text-xs"
+                                  onClick={() => downloadFile(f.file_path, f.file_name, f.file_type === "input" ? "input-files" : "output-files")}
+                                >
+                                  <Download className="h-3 w-3 mr-1" />
+                                  {f.file_name} ({f.file_type})
+                                </Button>
+                                {"uploader_name" in f && (f as { uploader_name?: string }).uploader_name && (
+                                  <p className="text-xs text-muted-foreground pl-2">uploaded by {(f as { uploader_name: string }).uploader_name}</p>
+                                )}
+                              </div>
                             ))}
                           </div>
                         </div>
                       )}
-
-                      {/* Upload Output */}
-                      <div className="pt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => document.getElementById(`upload-${selected.id}`)?.click()}
-                        >
-                          <Upload className="h-3 w-3 mr-1" /> Upload Output File
-                        </Button>
-                        <input
-                          id={`upload-${selected.id}`}
-                          type="file"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) uploadOutputFile(selected.id, file);
-                          }}
-                        />
-                      </div>
                     </CardContent>
                   </Card>
                 ) : (

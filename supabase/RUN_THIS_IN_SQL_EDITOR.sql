@@ -1,0 +1,7 @@
+-- ============================================================
+-- INSTRUCTIONS: Run these files in order
+--
+-- 1. PART1_add_enum.sql            (adds parttimer to enum)
+-- 2. PART2_policies_and_seeds.sql  (policies + seeds + user_roles name column)
+-- 3. PART4_parttimer_assigned_to.sql (part-timer claim/upload workflow)
+-- ============================================================

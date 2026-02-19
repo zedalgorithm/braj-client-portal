@@ -1,10 +1,10 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { BarChart3, LogOut, LayoutDashboard } from "lucide-react";
+import { BarChart3, LogOut, LayoutDashboard, User } from "lucide-react";
 
 export function Header() {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isPartTimer, signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -23,11 +23,19 @@ export function Header() {
           {user ? (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link to={isAdmin ? "/admin" : "/dashboard"}>
+                <Link to={isAdmin ? "/admin" : isPartTimer ? "/parttimer" : "/dashboard"}>
                   <LayoutDashboard className="h-4 w-4 mr-1" />
                   Dashboard
                 </Link>
               </Button>
+              {isPartTimer && (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/parttimer/account">
+                    <User className="h-4 w-4 mr-1" />
+                    Account
+                  </Link>
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4 mr-1" />
                 Sign Out
