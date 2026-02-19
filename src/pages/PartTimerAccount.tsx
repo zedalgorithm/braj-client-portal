@@ -15,7 +15,7 @@ type OrderWithProfile = Tables<"orders"> & { profiles?: { full_name: string; ema
 type ProfileRow = Tables<"profiles">;
 
 export default function PartTimerAccount() {
-  const { user, isPartTimer, isLoading } = useAuth();
+  const { user, isPartTimer, isPendingPartTimer, isLoading } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [orders, setOrders] = useState<OrderWithProfile[]>([]);
@@ -24,8 +24,10 @@ export default function PartTimerAccount() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isLoading && (!user || !isPartTimer)) navigate("/auth");
-  }, [user, isPartTimer, isLoading, navigate]);
+    if (!isLoading && !user) navigate("/auth");
+    else if (!isLoading && user && isPendingPartTimer) navigate("/pending-parttimer");
+    else if (!isLoading && user && !isPartTimer) navigate("/auth");
+  }, [user, isPartTimer, isPendingPartTimer, isLoading, navigate]);
 
   useEffect(() => {
     if (!user || !isPartTimer) return;

@@ -18,7 +18,7 @@ import { Upload } from "lucide-react";
 export default function OrderForm() {
   const [searchParams] = useSearchParams();
   const preselected = searchParams.get("service") || "";
-  const { user, isAdmin, isPartTimer, isLoading } = useAuth();
+  const { user, isAdmin, isPartTimer, isPendingPartTimer, isLoading } = useAuth();
   const navigate = useNavigate();
 
   const [serviceId, setServiceId] = useState(preselected);
@@ -40,8 +40,9 @@ export default function OrderForm() {
 
   useEffect(() => {
     if (!isLoading && !user) navigate("/auth");
-    if (!isLoading && user && isPartTimer && !isAdmin) navigate("/parttimer");
-  }, [user, isAdmin, isPartTimer, isLoading, navigate]);
+    else if (!isLoading && user && isPendingPartTimer) navigate("/pending-parttimer");
+    else if (!isLoading && user && isPartTimer && !isAdmin) navigate("/parttimer");
+  }, [user, isAdmin, isPartTimer, isPendingPartTimer, isLoading, navigate]);
 
   const service = SERVICES.find((s) => s.id === serviceId);
   const isResearch = serviceId === "research";

@@ -286,9 +286,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      approve_pending_parttimer: {
+        Args: { _user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
-      app_role: "admin" | "client" | "parttimer"
+      app_role: "admin" | "client" | "parttimer" | "pending_parttimer"
       file_type: "input" | "output"
       order_status: "pending" | "in_progress" | "completed"
     }
@@ -418,7 +422,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "client", "parttimer"],
+      app_role: ["admin", "client", "parttimer", "pending_parttimer"],
       file_type: ["input", "output"],
       order_status: ["pending", "in_progress", "completed"],
     },

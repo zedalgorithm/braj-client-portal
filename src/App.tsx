@@ -12,6 +12,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AdminTransactions from "./pages/AdminTransactions";
 import PartTimerDashboard from "./pages/PartTimerDashboard";
 import PartTimerAccount from "./pages/PartTimerAccount";
+import PendingPartTimer from "./pages/PendingPartTimer";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/admin/transactions" element={<AdminTransactions />} />
             <Route path="/parttimer" element={<PartTimerDashboard />} />
             <Route path="/parttimer/account" element={<PartTimerAccount />} />
+            <Route path="/pending-parttimer" element={<PendingPartTimer />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

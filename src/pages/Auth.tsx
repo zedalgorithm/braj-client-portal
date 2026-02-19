@@ -21,15 +21,16 @@ export default function Auth() {
   const [gcashNumber, setGcashNumber] = useState("");
   const [gcashName, setGcashName] = useState("");
   const [loading, setLoading] = useState(false);
-  const { user, isAdmin, isPartTimer, isLoading, signIn, signUp } = useAuth();
+  const { user, isAdmin, isPartTimer, isPendingPartTimer, isLoading, signIn, signUp } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!user || isLoading) return;
     if (isAdmin) navigate("/admin");
     else if (isPartTimer) navigate("/parttimer");
+    else if (isPendingPartTimer) navigate("/pending-parttimer");
     else navigate("/dashboard");
-  }, [user, isAdmin, isPartTimer, isLoading, navigate]);
+  }, [user, isAdmin, isPartTimer, isPendingPartTimer, isLoading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +52,9 @@ export default function Auth() {
     } else {
       toast({
         title: "Account created!",
-        description: isPartTimerSignup ? "Part-timer account created. Please check your email to verify." : "Please check your email to verify your account.",
+        description: isPartTimerSignup
+          ? "Your part-timer application was submitted. You can log in after email verification, but you’ll need admin approval before you can access the part-timer dashboard."
+          : "Please check your email to verify your account.",
       });
       setTab("login");
     }

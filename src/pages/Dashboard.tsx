@@ -47,7 +47,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const { user, isAdmin, isPartTimer, isLoading } = useAuth();
+  const { user, isAdmin, isPartTimer, isPendingPartTimer, isLoading } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Tables<"orders">[]>([]);
   const [files, setFiles] = useState<Tables<"order_files">[]>([]);
@@ -66,8 +66,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isLoading && !user) navigate("/auth");
-    if (!isLoading && user && isPartTimer && !isAdmin) navigate("/parttimer");
-  }, [user, isAdmin, isPartTimer, isLoading, navigate]);
+    else if (!isLoading && user && isPendingPartTimer) navigate("/pending-parttimer");
+    else if (!isLoading && user && isPartTimer && !isAdmin) navigate("/parttimer");
+  }, [user, isAdmin, isPartTimer, isPendingPartTimer, isLoading, navigate]);
 
   useEffect(() => {
     if (!user) return;

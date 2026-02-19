@@ -4,13 +4,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { BarChart3, LogOut, LayoutDashboard, User } from "lucide-react";
 
 export function Header() {
-  const { user, isAdmin, isPartTimer, signOut } = useAuth();
+  const { user, isAdmin, isPartTimer, isPendingPartTimer, signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
   };
+
+  const dashboardLink = isAdmin ? "/admin" : isPartTimer ? "/parttimer" : isPendingPartTimer ? "/pending-parttimer" : "/dashboard";
 
   return (
     <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -23,9 +25,9 @@ export function Header() {
           {user ? (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link to={isAdmin ? "/admin" : isPartTimer ? "/parttimer" : "/dashboard"}>
+                <Link to={dashboardLink}>
                   <LayoutDashboard className="h-4 w-4 mr-1" />
-                  Dashboard
+                  {isPendingPartTimer ? "Pending approval" : "Dashboard"}
                 </Link>
               </Button>
               {isPartTimer && (

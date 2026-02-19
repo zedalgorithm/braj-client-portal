@@ -14,7 +14,7 @@ import { SHARING_PER_SERVICE, getAmountFromService, SERVICES } from "@/lib/servi
 import { fetchPartTimerRatings } from "@/lib/parttimer-ratings";
 import { toast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
-import { Download, Loader2, Search, List, Clock, CheckCircle, FileCheck, Receipt, Star } from "lucide-react";
+import { Download, Loader2, Search, List, Clock, CheckCircle, FileCheck, Receipt, Star, UserPlus } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusColors: Record<string, string> = {
@@ -46,6 +46,8 @@ export default function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "in_progress" | "completed">("all");
   const [serviceFilter, setServiceFilter] = useState("all");
   const [partTimerRatings, setPartTimerRatings] = useState<Map<string, { avg: number; count: number }>>(new Map());
+  const [pendingPartTimers, setPendingPartTimers] = useState<{ user_id: string; name: string | null; email: string }[]>([]);
+  const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) navigate("/auth");
@@ -99,8 +101,24 @@ export default function AdminDashboard() {
       } else {
         setOrders([]);
       }
+      const { data: pendingRoles } = await supabase.from("user_roles").select("user_id, name").eq("role", "pending_parttimer");
+      if (pendingRoles && pendingRoles.length > 0) {
+        const pids = pendingRoles.map((r) => r.user_id);
+        const { data: profilesData } = await supabase.from("profiles").select("user_id, full_name, email").in("user_id", pids);
+        const profileMap = new Map((profilesData || []).map((p) => [p.user_id, p]));
+        setPendingPartTimers(
+          pendingRoles.map((r) => ({
+            user_id: r.user_id,
+            name: r.name || profileMap.get(r.user_id)?.full_name || null,
+            email: profileMap.get(r.user_id)?.email || "",
+          }))
+        );
+      } else {
+        setPendingPartTimers([]);
+      }
     } catch {
       setOrders([]);
+      setPendingPartTimers([]);
     } finally {
       setLoading(false);
     }
@@ -159,6 +177,18 @@ export default function AdminDashboard() {
       setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, pricing_tier: "Agreed amount", amount } : o)));
       setResearchAmountInput("");
       toast({ title: "Research amount set", description: `₱${amount.toLocaleString()}` });
+    }
+  };
+
+  const approvePartTimer = async (userId: string) => {
+    setApprovingUserId(userId);
+    const { error } = await supabase.rpc("approve_pending_parttimer", { _user_id: userId });
+    setApprovingUserId(null);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setPendingPartTimers((prev) => prev.filter((p) => p.user_id !== userId));
+      toast({ title: "Part-timer approved", description: "They can now log in and access the part-timer dashboard." });
     }
   };
 
@@ -246,6 +276,37 @@ export default function AdminDashboard() {
               <Link to="/admin/transactions"><Receipt className="h-4 w-4 mr-1" /> Transaction History</Link>
             </Button>
           </div>
+
+          {pendingPartTimers.length > 0 && (
+            <Card className="mb-6 border-amber-200 bg-amber-50/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <UserPlus className="h-5 w-5" />
+                  Pending part-timer applications
+                </CardTitle>
+                <CardDescription>These users signed up as part-timers and cannot access the dashboard until you approve them.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {pendingPartTimers.map((p) => (
+                    <div key={p.user_id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-background p-3">
+                      <div>
+                        <span className="font-medium">{p.name || "—"}</span>
+                        {p.email && <span className="text-muted-foreground text-sm ml-2">({p.email})</span>}
+                      </div>
+                      <Button
+                        size="sm"
+                        disabled={!!approvingUserId}
+                        onClick={() => approvePartTimer(p.user_id)}
+                      >
+                        {approvingUserId === p.user_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Order status tabs: All | Pending | In Progress | Completed */}
           <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted mb-6">

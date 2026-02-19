@@ -7,6 +7,7 @@ type AuthContextType = {
   user: User | null;
   isAdmin: boolean;
   isPartTimer: boolean;
+  isPendingPartTimer: boolean;
   isLoading: boolean;
   signUp: (email: string, password: string, fullName: string, asPartTimer?: boolean, gcashNumber?: string, gcashName?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -20,24 +21,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPartTimer, setIsPartTimer] = useState(false);
+  const [isPendingPartTimer, setIsPendingPartTimer] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkRolesWithTimeout = async (userId: string) => {
     try {
       await Promise.race([
         (async () => {
-          const [adminRes, partTimerRes] = await Promise.all([
+          const [adminRes, partTimerRes, pendingRes] = await Promise.all([
             supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
             supabase.rpc("has_role", { _user_id: userId, _role: "parttimer" }),
+            supabase.rpc("has_role", { _user_id: userId, _role: "pending_parttimer" }),
           ]);
           setIsAdmin(!!adminRes.data);
           setIsPartTimer(!!partTimerRes.data);
+          setIsPendingPartTimer(!!pendingRes.data);
         })(),
         new Promise((r) => setTimeout(r, 5000)),
       ]);
     } catch {
       setIsAdmin(false);
       setIsPartTimer(false);
+      setIsPendingPartTimer(false);
     }
   };
 
@@ -61,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setIsAdmin(false);
           setIsPartTimer(false);
+          setIsPendingPartTimer(false);
         }
         finish();
       }
@@ -75,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setIsAdmin(false);
           setIsPartTimer(false);
+          setIsPendingPartTimer(false);
         }
       } finally {
         finish();
@@ -114,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, isAdmin, isPartTimer, isLoading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, user, isAdmin, isPartTimer, isPendingPartTimer, isLoading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

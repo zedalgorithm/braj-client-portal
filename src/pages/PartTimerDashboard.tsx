@@ -28,7 +28,7 @@ const statusLabels: Record<string, string> = {
 type OrderWithProfile = Tables<"orders"> & { profiles?: { full_name: string; email: string } | null };
 
 export default function PartTimerDashboard() {
-  const { user, isPartTimer, isLoading } = useAuth();
+  const { user, isPartTimer, isPendingPartTimer, isLoading } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderWithProfile[]>([]);
   const [files, setFiles] = useState<Tables<"order_files">[]>([]);
@@ -39,8 +39,10 @@ export default function PartTimerDashboard() {
   const [serviceFilter, setServiceFilter] = useState("all");
 
   useEffect(() => {
-    if (!isLoading && (!user || !isPartTimer)) navigate("/auth");
-  }, [user, isPartTimer, isLoading, navigate]);
+    if (!isLoading && !user) navigate("/auth");
+    else if (!isLoading && user && isPendingPartTimer) navigate("/pending-parttimer");
+    else if (!isLoading && user && !isPartTimer) navigate("/auth");
+  }, [user, isPartTimer, isPendingPartTimer, isLoading, navigate]);
 
   const fetchData = async () => {
     try {
