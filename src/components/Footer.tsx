@@ -18,7 +18,7 @@ export function Footer() {
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>Statistical Analysis</li>
             <li>Research Assistance</li>
-            <li>Turnitin Check</li>
+            <li>Similarities/Plagiarism Report</li>
             <li>Validation of Instrument</li>
             <li>Paraphrasing</li>
             <li>Editing</li>

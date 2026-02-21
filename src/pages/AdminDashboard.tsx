@@ -14,6 +14,15 @@ import { SHARING_PER_SERVICE, getAmountFromService, SERVICES } from "@/lib/servi
 import { fetchPartTimerRatings } from "@/lib/parttimer-ratings";
 import { toast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Download, Loader2, Search, List, Clock, CheckCircle, FileCheck, Receipt, Star, UserPlus } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -48,6 +57,8 @@ export default function AdminDashboard() {
   const [partTimerRatings, setPartTimerRatings] = useState<Map<string, { avg: number; count: number }>>(new Map());
   const [pendingPartTimers, setPendingPartTimers] = useState<{ user_id: string; name: string | null; email: string }[]>([]);
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
+  const [rejectingUserId, setRejectingUserId] = useState<string | null>(null);
+  const [rejectConfirmUserId, setRejectConfirmUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) navigate("/auth");
@@ -192,6 +203,19 @@ export default function AdminDashboard() {
     }
   };
 
+  const rejectPartTimer = async (userId: string) => {
+    setRejectConfirmUserId(null);
+    setRejectingUserId(userId);
+    const { error } = await supabase.rpc("reject_pending_parttimer", { _user_id: userId });
+    setRejectingUserId(null);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setPendingPartTimers((prev) => prev.filter((p) => p.user_id !== userId));
+      toast({ title: "Application rejected", description: "They can use the app as a client." });
+    }
+  };
+
   const togglePayment = async (orderId: string, current: boolean) => {
     if (!current) {
       const order = orders.find((o) => o.id === orderId);
@@ -294,19 +318,49 @@ export default function AdminDashboard() {
                         <span className="font-medium">{p.name || "—"}</span>
                         {p.email && <span className="text-muted-foreground text-sm ml-2">({p.email})</span>}
                       </div>
-                      <Button
-                        size="sm"
-                        disabled={!!approvingUserId}
-                        onClick={() => approvePartTimer(p.user_id)}
-                      >
-                        {approvingUserId === p.user_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!!approvingUserId || !!rejectingUserId}
+                          onClick={() => setRejectConfirmUserId(p.user_id)}
+                        >
+                          {rejectingUserId === p.user_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reject"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={!!approvingUserId || !!rejectingUserId}
+                          onClick={() => approvePartTimer(p.user_id)}
+                        >
+                          {approvingUserId === p.user_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
           )}
+
+          <AlertDialog open={!!rejectConfirmUserId} onOpenChange={(open) => !open && setRejectConfirmUserId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reject part-timer application?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This user will no longer be pending. They can still use the app as a client.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  onClick={() => rejectConfirmUserId && rejectPartTimer(rejectConfirmUserId)}
+                >
+                  Reject
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Order status tabs: All | Pending | In Progress | Completed */}
           <div className="flex flex-wrap gap-2 p-1 rounded-lg bg-muted mb-6">

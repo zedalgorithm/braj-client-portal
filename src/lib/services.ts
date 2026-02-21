@@ -8,7 +8,7 @@ export type ServiceTier = {
 export const SHARING_PER_SERVICE: Record<string, { ownerPct: number; parttimerPct: number }> = {
   "Statistical Analysis": { ownerPct: 40, parttimerPct: 60 },
   "Research": { ownerPct: 40, parttimerPct: 60 },
-  "Turnitin Check": { ownerPct: 50, parttimerPct: 50 },
+  "Similarities/Plagiarism Report": { ownerPct: 50, parttimerPct: 50 },
   "Paraphrasing": { ownerPct: 50, parttimerPct: 50 },
   "Validation of Instrument": { ownerPct: 40, parttimerPct: 60 },
   "Editing": { ownerPct: 30, parttimerPct: 70 },
@@ -59,7 +59,7 @@ export const SERVICES: ServiceDefinition[] = [
   },
   {
     id: "turnitin-check",
-    name: "Turnitin Check",
+    name: "Similarities/Plagiarism Report",
     description: "Plagiarism checking service using Turnitin to ensure academic integrity of your work.",
     tiers: [{ name: "Standard Check", price: "₱500", priceValue: 500 }],
   },

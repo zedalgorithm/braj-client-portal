@@ -14,7 +14,7 @@
 - **Services section** with 5 service cards:
   - **Statistical Analysis**: Descriptive (KSh 1,500) | ANOVA/Regression/t-test/Correlation (KSh 3,000)
   - **Research**: Pricing TBD
-  - **Turnitin Check**: Pricing TBD
+  - **Similarities/Plagiarism Report**: Pricing TBD
   - **Paraphrasing**: Pricing TBD
   - **Editing**: Pricing TBD
 - Each card has a description, pricing tiers, and "Place Order" button (redirects to login if not authenticated)
