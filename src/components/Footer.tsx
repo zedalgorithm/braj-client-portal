@@ -30,6 +30,9 @@ export function Footer() {
             Email: baltazarabobojr@gmail.com<br />
             Phone: 09155090144
           </p>
+          <a href="/certificate-of-business-name-registration.pdf" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline mt-2 inline-block">
+            View Certificate of Business Name Registration
+          </a>
         </div>
       </div>
       <div className="container mt-8 pt-4 border-t text-center text-xs text-muted-foreground">

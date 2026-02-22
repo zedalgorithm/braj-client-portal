@@ -7,7 +7,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { SERVICES } from "@/lib/services";
-import { ArrowRight, BarChart3, FileText, CheckCircle, Edit3, Search, Star, Quote } from "lucide-react";
+import { ArrowRight, BarChart3, FileText, CheckCircle, Edit3, Search, Star, Quote, Award } from "lucide-react";
 
 const serviceIcons: Record<string, React.ReactNode> = {
   "statistical-analysis": <BarChart3 className="h-8 w-8" />,
@@ -172,6 +172,24 @@ const Index = () => {
           </div>
         </section>
       )}
+
+      {/* Certificate of Business Name Registration */}
+      <section className="py-16 border-t">
+        <div className="container">
+          <div className="max-w-2xl mx-auto text-center">
+            <Award className="h-12 w-12 text-primary mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Certificate of Business Name Registration</h2>
+            <p className="text-muted-foreground mb-6">
+              BRAJ Consultancy is a registered business. View our official certificate below.
+            </p>
+            <Button asChild variant="outline" size="lg">
+              <a href="/certificate-of-business-name-registration.pdf" target="_blank" rel="noopener noreferrer">
+                View certificate
+              </a>
+            </Button>
+          </div>
+        </div>
+      </section>
 
       <Footer />
     </div>
