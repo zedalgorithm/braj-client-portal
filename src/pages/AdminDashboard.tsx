@@ -43,6 +43,13 @@ type OrderWithProfile = Tables<"orders"> & {
   assigneeProfile?: { full_name: string; email: string } | null;
 };
 
+type PartTimerWithServices = {
+  user_id: string;
+  name: string | null;
+  email: string;
+  allowedServices: string[];
+};
+
 export default function AdminDashboard() {
   const { user, isAdmin, isLoading } = useAuth();
   const navigate = useNavigate();
@@ -59,6 +66,8 @@ export default function AdminDashboard() {
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
   const [rejectingUserId, setRejectingUserId] = useState<string | null>(null);
   const [rejectConfirmUserId, setRejectConfirmUserId] = useState<string | null>(null);
+  const [partTimers, setPartTimers] = useState<PartTimerWithServices[]>([]);
+  const [savingPartTimerId, setSavingPartTimerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) navigate("/auth");
@@ -127,9 +136,47 @@ export default function AdminDashboard() {
       } else {
         setPendingPartTimers([]);
       }
+      const { data: parttimerRoles, error: parttimerRolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, name")
+        .eq("role", "parttimer");
+      if (!parttimerRolesError && parttimerRoles && parttimerRoles.length > 0) {
+        const parttimerIds = parttimerRoles.map((r) => r.user_id);
+        const { data: ptProfiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, email")
+          .in("user_id", parttimerIds);
+        const ptProfileMap = new Map((ptProfiles || []).map((p) => [p.user_id, p]));
+        const { data: allowedServicesRows, error: allowedError } = await supabase
+          .from("parttimer_allowed_services")
+          .select("parttimer_id, service_type")
+          .in("parttimer_id", parttimerIds);
+        const allowedMap = new Map<string, string[]>();
+        if (!allowedError && allowedServicesRows) {
+          for (const row of allowedServicesRows as { parttimer_id: string; service_type: string }[]) {
+            const current = allowedMap.get(row.parttimer_id) || [];
+            current.push(row.service_type);
+            allowedMap.set(row.parttimer_id, current);
+          }
+        }
+        setPartTimers(
+          parttimerRoles.map((r) => {
+            const profile = ptProfileMap.get(r.user_id);
+            return {
+              user_id: r.user_id,
+              name: profile?.full_name || r.name || null,
+              email: profile?.email || "",
+              allowedServices: allowedMap.get(r.user_id) || [],
+            };
+          })
+        );
+      } else {
+        setPartTimers([]);
+      }
     } catch {
       setOrders([]);
       setPendingPartTimers([]);
+      setPartTimers([]);
     } finally {
       setLoading(false);
     }
@@ -278,6 +325,41 @@ export default function AdminDashboard() {
   const selectedFiles = files.filter((f) => f.order_id === selectedOrder);
   const serviceTypes = [...new Set(orders.map((o) => o.service_type))];
 
+  const handleTogglePartTimerService = async (userId: string, serviceType: string, enable: boolean) => {
+    setSavingPartTimerId(userId);
+    if (enable) {
+      const { error } = await supabase.from("parttimer_allowed_services").insert({
+        parttimer_id: userId,
+        service_type: serviceType,
+      });
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    } else {
+      const { error } = await supabase
+        .from("parttimer_allowed_services")
+        .delete()
+        .eq("parttimer_id", userId)
+        .eq("service_type", serviceType);
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    }
+    setSavingPartTimerId(null);
+    setPartTimers((prev) =>
+      prev.map((pt) =>
+        pt.user_id === userId
+          ? {
+              ...pt,
+              allowedServices: enable
+                ? Array.from(new Set([...pt.allowedServices, serviceType]))
+                : pt.allowedServices.filter((s) => s !== serviceType),
+            }
+          : pt
+      )
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col">
@@ -338,6 +420,54 @@ export default function AdminDashboard() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {partTimers.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-lg">Part-timer service access</CardTitle>
+                <CardDescription>
+                  Choose which services each part-timer is allowed to work on. If no services are selected for anyone, part-timers can work on all services.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {partTimers.map((pt) => (
+                  <div key={pt.user_id} className="border rounded-md p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <div>
+                        <p className="font-medium">{pt.name || "—"}</p>
+                        {pt.email && <p className="text-xs text-muted-foreground">{pt.email}</p>}
+                      </div>
+                      {pt.allowedServices.length > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {pt.allowedServices.length} service{pt.allowedServices.length > 1 ? "s" : ""} enabled
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      {SERVICES.map((service) => {
+                        const checked = pt.allowedServices.includes(service.name);
+                        return (
+                          <label
+                            key={service.name}
+                            className="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs cursor-pointer bg-background"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              disabled={!!savingPartTimerId}
+                              onCheckedChange={(value) =>
+                                handleTogglePartTimerService(pt.user_id, service.name, Boolean(value))
+                              }
+                            />
+                            <span>{service.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}

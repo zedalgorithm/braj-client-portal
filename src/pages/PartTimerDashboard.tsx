@@ -10,7 +10,7 @@ import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Download, Loader2, Search, PlayCircle, Upload, Lock } from "lucide-react";
+import { Download, Loader2, Search, PlayCircle, Upload, Lock, User } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusColors: Record<string, string> = {
@@ -37,12 +37,29 @@ export default function PartTimerDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [serviceFilter, setServiceFilter] = useState("all");
+  const [allowedServices, setAllowedServices] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (!isLoading && !user) navigate("/auth");
     else if (!isLoading && user && isPendingPartTimer) navigate("/pending-parttimer");
     else if (!isLoading && user && !isPartTimer) navigate("/auth");
   }, [user, isPartTimer, isPendingPartTimer, isLoading, navigate]);
+
+  useEffect(() => {
+    const loadAllowedServices = async () => {
+      if (!user || !isPartTimer) return;
+      const { data, error } = await supabase
+        .from("parttimer_allowed_services")
+        .select("service_type")
+        .eq("parttimer_id", user.id);
+      if (error) {
+        setAllowedServices(null);
+        return;
+      }
+      setAllowedServices((data || []).map((row: { service_type: string }) => row.service_type));
+    };
+    loadAllowedServices();
+  }, [user, isPartTimer]);
 
   const fetchData = async () => {
     try {
@@ -97,8 +114,23 @@ export default function PartTimerDashboard() {
     if (user && isPartTimer) fetchData();
   }, [user, isPartTimer]);
 
+  const canWorkOnService = (serviceType: string) => {
+    if (!allowedServices || allowedServices.length === 0) return true;
+    return allowedServices.includes(serviceType);
+  };
+
   const markInProgress = async (orderId: string) => {
     if (!user) return;
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) return;
+    if (!canWorkOnService(order.service_type)) {
+      toast({
+        title: "Not allowed for this service",
+        description: "Ask the admin to enable this service type for you.",
+        variant: "destructive",
+      });
+      return;
+    }
     const { error } = await supabase
       .from("orders")
       .update({ status: "in_progress", assigned_to: user.id })
@@ -328,13 +360,21 @@ export default function PartTimerDashboard() {
 
                       {/* Mark In Progress / Upload actions */}
                       {user && selected.assigned_to === null && selected.status === "pending" && (
-                        <Button
-                          className="w-full"
-                          onClick={() => markInProgress(selected.id)}
-                        >
-                          <PlayCircle className="h-4 w-4 mr-2" />
-                          Mark as In Progress
-                        </Button>
+                        <div className="space-y-2">
+                          <Button
+                            className="w-full"
+                            disabled={!canWorkOnService(selected.service_type)}
+                            onClick={() => markInProgress(selected.id)}
+                          >
+                            <PlayCircle className="h-4 w-4 mr-2" />
+                            Mark as In Progress
+                          </Button>
+                          {allowedServices && allowedServices.length > 0 && !canWorkOnService(selected.service_type) && (
+                            <p className="text-xs text-amber-700 text-center">
+                              You are not allowed to work on this service. Please contact the admin if this is incorrect.
+                            </p>
+                          )}
+                        </div>
                       )}
                       {user && selected.assigned_to === user.id && (selected.status === "in_progress" || (selected.status === "completed" && !selected.payment_received)) && (
                         <div>

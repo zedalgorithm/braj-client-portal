@@ -274,6 +274,27 @@ export type Database = {
         }
         Relationships: []
       }
+      parttimer_allowed_services: {
+        Row: {
+          id: string
+          parttimer_id: string
+          service_type: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          parttimer_id: string
+          service_type: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          parttimer_id?: string
+          service_type?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

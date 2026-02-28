@@ -3,11 +3,14 @@ import { useNavigate, Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchPartTimerRatings } from "@/lib/parttimer-ratings";
+import { toast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, User, Banknote, History, CheckCircle, Check, Mail, Phone, CreditCard, Star } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -22,6 +25,12 @@ export default function PartTimerAccount() {
   const [payments, setPayments] = useState<Tables<"transactions">[]>([]);
   const [rating, setRating] = useState<{ avg: number; count: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [editFullName, setEditFullName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editGcashNumber, setEditGcashNumber] = useState("");
+  const [editGcashName, setEditGcashName] = useState("");
 
   useEffect(() => {
     if (!isLoading && !user) navigate("/auth");
@@ -39,6 +48,10 @@ export default function PartTimerAccount() {
           .eq("user_id", user.id)
           .single();
         setProfile(profileData || null);
+        setEditFullName(profileData?.full_name || "");
+        setEditPhone(profileData?.phone || "");
+        setEditGcashNumber(profileData?.gcash_number || "");
+        setEditGcashName(profileData?.gcash_name || "");
 
         const { data: ordersData } = await supabase
           .from("orders")
@@ -81,6 +94,43 @@ export default function PartTimerAccount() {
     fetchData();
   }, [user, isPartTimer]);
 
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setSavingProfile(true);
+    const updates = {
+      full_name: editFullName.trim() || null,
+      phone: editPhone.trim() || null,
+      gcash_number: editGcashNumber.trim() || null,
+      gcash_name: editGcashName.trim() || null,
+    };
+    const { error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .eq("user_id", user.id);
+    setSavingProfile(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+    setProfile((prev) =>
+      prev
+        ? { ...prev, ...updates }
+        : ({
+            email: user.email ?? "",
+            user_id: user.id,
+            id: "",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            gcash_name: updates.gcash_name,
+            gcash_number: updates.gcash_number,
+            full_name: updates.full_name ?? "",
+            phone: updates.phone,
+          } as ProfileRow)
+    );
+    setEditingProfile(false);
+    toast({ title: "Profile updated" });
+  };
+
   const completedByMe = orders.filter((o) => o.status === "completed" && o.assigned_to === user?.id);
 
   if (loading) {
@@ -113,59 +163,170 @@ export default function PartTimerAccount() {
               Account details
             </h2>
             <Card className="overflow-hidden">
-              <CardHeader className="border-b bg-muted/30">
-                <CardTitle className="text-base font-semibold">Profile</CardTitle>
-                <CardDescription>Your part-timer account information</CardDescription>
+              <CardHeader className="border-b bg-muted/30 items-start gap-2">
+                <div>
+                  <CardTitle className="text-base font-semibold">Profile</CardTitle>
+                  <CardDescription>Your part-timer account information</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (!editingProfile && profile) {
+                      setEditFullName(profile.full_name || "");
+                      setEditPhone(profile.phone || "");
+                      setEditGcashNumber(profile.gcash_number || "");
+                      setEditGcashName(profile.gcash_name || "");
+                    }
+                    setEditingProfile((prev) => !prev);
+                  }}
+                >
+                  {editingProfile ? "Cancel" : "Edit"}
+                </Button>
               </CardHeader>
               <CardContent className="p-0">
-                <dl className="divide-y">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
-                    <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
-                      <User className="h-4 w-4 shrink-0" />
-                      Complete name
-                    </dt>
-                    <dd className="text-sm font-medium flex items-center gap-2">
-                      {profile?.full_name || "—"}
+                {editingProfile ? (
+                  <form
+                    className="space-y-4 px-6 py-4"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!savingProfile) handleSaveProfile();
+                    }}
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="pt-full-name">Complete name</Label>
+                      <Input
+                        id="pt-full-name"
+                        value={editFullName}
+                        onChange={(e) => setEditFullName(e.target.value)}
+                        required
+                      />
                       {rating && (
-                        <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-normal">
-                          <Star className="h-4 w-4 fill-amber-500" /> {rating.avg} ({rating.count} ratings)
-                        </span>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                          Current rating: {rating.avg} ({rating.count} ratings)
+                        </p>
                       )}
-                    </dd>
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
-                    <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
-                      <Mail className="h-4 w-4 shrink-0" />
-                      Email
-                    </dt>
-                    <dd className="text-sm">{profile?.email || user?.email || "—"}</dd>
-                  </div>
-                  {(profile?.gcash_number || profile?.gcash_name) ? (
-                    <>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
-                        <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
-                          <Phone className="h-4 w-4 shrink-0" />
-                          GCash number
-                        </dt>
-                        <dd className="text-sm font-mono tracking-wide">{profile?.gcash_number || "—"}</dd>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
-                        <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
-                          <CreditCard className="h-4 w-4 shrink-0" />
-                          GCash name
-                        </dt>
-                        <dd className="text-sm">{profile?.gcash_name || "—"}</dd>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="px-6 py-4">
-                      <p className="text-sm text-muted-foreground flex items-center gap-2">
-                        <CreditCard className="h-4 w-4 shrink-0" />
-                        GCash details not on file.
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pt-email">Email</Label>
+                      <Input
+                        id="pt-email"
+                        value={profile?.email || user?.email || ""}
+                        disabled
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Email is managed by the administrator and cannot be changed here.
                       </p>
                     </div>
-                  )}
-                </dl>
+                    <div className="space-y-2">
+                      <Label htmlFor="pt-phone">Phone number (optional)</Label>
+                      <Input
+                        id="pt-phone"
+                        type="tel"
+                        value={editPhone}
+                        onChange={(e) => setEditPhone(e.target.value)}
+                        placeholder="e.g. 09171234567"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pt-gcash-number">GCash number</Label>
+                      <Input
+                        id="pt-gcash-number"
+                        type="tel"
+                        value={editGcashNumber}
+                        onChange={(e) => setEditGcashNumber(e.target.value)}
+                        placeholder="e.g. 09171234567"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pt-gcash-name">GCash name</Label>
+                      <Input
+                        id="pt-gcash-name"
+                        value={editGcashName}
+                        onChange={(e) => setEditGcashName(e.target.value)}
+                        placeholder="Name on GCash account"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          if (profile) {
+                            setEditFullName(profile.full_name || "");
+                            setEditPhone(profile.phone || "");
+                            setEditGcashNumber(profile.gcash_number || "");
+                            setEditGcashName(profile.gcash_name || "");
+                          }
+                          setEditingProfile(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={savingProfile}>
+                        {savingProfile ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                        Save changes
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <dl className="divide-y">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
+                      <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
+                        <User className="h-4 w-4 shrink-0" />
+                        Complete name
+                      </dt>
+                      <dd className="text-sm font-medium flex items-center gap-2">
+                        {profile?.full_name || "—"}
+                        {rating && (
+                          <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-normal">
+                            <Star className="h-4 w-4 fill-amber-500" /> {rating.avg} ({rating.count} ratings)
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
+                      <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
+                        <Mail className="h-4 w-4 shrink-0" />
+                        Email
+                      </dt>
+                      <dd className="text-sm">{profile?.email || user?.email || "—"}</dd>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
+                      <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
+                        <Phone className="h-4 w-4 shrink-0" />
+                        Phone number
+                      </dt>
+                      <dd className="text-sm">{profile?.phone || "—"}</dd>
+                    </div>
+                    {(profile?.gcash_number || profile?.gcash_name) ? (
+                      <>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
+                          <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
+                            <Phone className="h-4 w-4 shrink-0" />
+                            GCash number
+                          </dt>
+                          <dd className="text-sm font-mono tracking-wide">{profile?.gcash_number || "—"}</dd>
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-6 py-4">
+                          <dt className="text-sm font-medium text-muted-foreground min-w-[140px] flex items-center gap-2">
+                            <CreditCard className="h-4 w-4 shrink-0" />
+                            GCash name
+                          </dt>
+                          <dd className="text-sm">{profile?.gcash_name || "—"}</dd>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="px-6 py-4">
+                        <p className="text-sm text-muted-foreground flex items-center gap-2">
+                          <CreditCard className="h-4 w-4 shrink-0" />
+                          GCash details not on file.
+                        </p>
+                      </div>
+                    )}
+                  </dl>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -30,7 +30,15 @@ export function Header() {
                   {isPendingPartTimer ? "Pending approval" : "Dashboard"}
                 </Link>
               </Button>
-              {isPartTimer && (
+              {isAdmin && (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/admin/account">
+                    <User className="h-4 w-4 mr-1" />
+                    Profile
+                  </Link>
+                </Button>
+              )}
+              {isPartTimer && !isAdmin && (
                 <Button variant="ghost" size="sm" asChild>
                   <Link to="/parttimer/account">
                     <User className="h-4 w-4 mr-1" />
