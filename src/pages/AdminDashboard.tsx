@@ -23,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Download, Loader2, Search, List, Clock, CheckCircle, FileCheck, Receipt, Star, UserPlus } from "lucide-react";
+import { Download, Loader2, Search, List, Clock, CheckCircle, FileCheck, Receipt, Star, UserPlus, Trash2 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusColors: Record<string, string> = {
@@ -68,6 +68,8 @@ export default function AdminDashboard() {
   const [rejectConfirmUserId, setRejectConfirmUserId] = useState<string | null>(null);
   const [partTimers, setPartTimers] = useState<PartTimerWithServices[]>([]);
   const [savingPartTimerId, setSavingPartTimerId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) navigate("/auth");
@@ -263,6 +265,48 @@ export default function AdminDashboard() {
     }
   };
 
+  const removePartTimerDirect = async (userId: string, name: string | null) => {
+    const { error: allowedError } = await supabase.from("parttimer_allowed_services").delete().eq("parttimer_id", userId);
+    if (allowedError) return allowedError;
+    const { error: roleError } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", "parttimer");
+    if (roleError) return roleError;
+    const { error: clientError } = await supabase.from("user_roles").insert({
+      user_id: userId,
+      role: "client",
+      name: name || "Client",
+    });
+    if (clientError && clientError.code !== "23505") return clientError;
+    const { error: orderError } = await supabase
+      .from("orders")
+      .update({ assigned_to: null, status: "pending" })
+      .eq("assigned_to", userId)
+      .eq("status", "in_progress");
+    return orderError;
+  };
+
+  const deletePartTimer = async (userId: string) => {
+    const partTimer = partTimers.find((pt) => pt.user_id === userId);
+    setDeleteConfirmUserId(null);
+    setDeletingUserId(userId);
+    const { error } = await supabase.rpc("remove_parttimer", { _user_id: userId });
+    const fallbackNeeded = !!error && (error.code === "PGRST202" || /could not find the function/i.test(error.message));
+    const finalError = fallbackNeeded ? await removePartTimerDirect(userId, partTimer?.name || null) : error;
+    setDeletingUserId(null);
+    if (finalError) {
+      toast({ title: "Error", description: finalError.message, variant: "destructive" });
+      return;
+    }
+    setPartTimers((prev) => prev.filter((pt) => pt.user_id !== userId));
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.assigned_to === userId && o.status === "in_progress"
+          ? { ...o, assigned_to: null, status: "pending", assigneeProfile: null }
+          : o
+      )
+    );
+    toast({ title: "Part-timer deleted", description: "They can still use the app as a client." });
+  };
+
   const togglePayment = async (orderId: string, current: boolean) => {
     if (!current) {
       const order = orders.find((o) => o.id === orderId);
@@ -440,11 +484,27 @@ export default function AdminDashboard() {
                         <p className="font-medium">{pt.name || "—"}</p>
                         {pt.email && <p className="text-xs text-muted-foreground">{pt.email}</p>}
                       </div>
-                      {pt.allowedServices.length > 0 && (
-                        <Badge variant="outline" className="text-xs">
-                          {pt.allowedServices.length} service{pt.allowedServices.length > 1 ? "s" : ""} enabled
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {pt.allowedServices.length > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            {pt.allowedServices.length} service{pt.allowedServices.length > 1 ? "s" : ""} enabled
+                          </Badge>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={!!deletingUserId || !!savingPartTimerId}
+                          onClick={() => setDeleteConfirmUserId(pt.user_id)}
+                        >
+                          {deletingUserId === pt.user_id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Trash2 className="h-4 w-4 mr-1" /> Delete
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-3">
                       {SERVICES.map((service) => {
@@ -471,6 +531,29 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           )}
+
+          <AlertDialog open={!!deleteConfirmUserId} onOpenChange={(open) => !open && setDeleteConfirmUserId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this part-timer?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {(partTimers.find((pt) => pt.user_id === deleteConfirmUserId)?.name ||
+                    partTimers.find((pt) => pt.user_id === deleteConfirmUserId)?.email ||
+                    "This user") +
+                    " will lose part-timer access. In-progress orders assigned to them will go back to pending. They can still use the app as a client."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  onClick={() => deleteConfirmUserId && deletePartTimer(deleteConfirmUserId)}
+                >
+                  Delete
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <AlertDialog open={!!rejectConfirmUserId} onOpenChange={(open) => !open && setRejectConfirmUserId(null)}>
             <AlertDialogContent>

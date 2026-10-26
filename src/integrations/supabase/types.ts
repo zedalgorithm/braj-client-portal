@@ -315,6 +315,10 @@ export type Database = {
         Args: { _user_id: string }
         Returns: undefined
       }
+      remove_parttimer: {
+        Args: { _user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "client" | "parttimer" | "pending_parttimer"
